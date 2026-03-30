@@ -16,6 +16,7 @@
 #define CYCLE_TIME_5MS 5   /* 50ms execution interval  */
 #define CYCLE_TIME_MS 100  /* 100ms default wait time  */
 #define CYCLE_TIME_1MS 1   /* 1ms execution interval   */
+#define UI_IDLE_TIMEOUT_MS 30000UL /* shutdown interval*/
 
 /***************************************************************************************************
  *                                     DEFINES — Push Buttons
@@ -134,6 +135,9 @@ bool reacP2Done = false;         /* Player 2 has responded                  */
 bool reacFalseStart = false;  /* false start for reaction game*/
 bool resultsDisplayed = false; 
 
+unsigned long lastUserActivityMs = 0;
+bool screenSleeping = false;
+
 /***************************************************************************************************
  *                                     GLOBAL VARIABLES — Joystick
  ***************************************************************************************************/
@@ -236,6 +240,13 @@ static void TimeElapsed(void);
 static void SD_printDirectory(File Dir, int NumTabs);
 static uint8_t SD_getFilesList(File Dir, char* FilesList, uint8_t maxListSize, uint8_t maxNameSize);
 
+/**************************************************************************************************
+                                 SCREEN SAVER
+**************************************************************************************************/
+
+static void markUserActivity(void);
+static void handleInactivitySleep(void);
+
 /***************************************************************************************************
  *                                     SETUP
  ***************************************************************************************************/
@@ -304,6 +315,11 @@ void setup() {
   digitalWrite(LED_RED, LOW);
   digitalWrite(LED_BLUE, LOW);
   digitalWrite(LED_GREEN, HIGH);
+
+
+  lastUserActivityMs = millis();
+  screenSleeping = false;
+  digitalWrite(LCD_BCKL_PIN, HIGH);
 
   /* ---- Joystick auto-calibration (average 16 samples at rest) ---- */
   analogReadResolution(12);
@@ -395,7 +411,7 @@ void loop() {
     Task3_1s();
     previousMillis1s = currentMillis;
   }
-
+  handleInactivitySleep();
   SchedulerStarted = true;
 }
 
@@ -612,6 +628,7 @@ void Task2_5ms(void) {
      if(deltaX>2 || deltaY>2){
         if (joyPrevX >= 0 && joyPrevY >= 0) {
           lcd.fillCircle(joyPrevX, joyPrevY, DOT_RADIUS + 1, ST77XX_BLACK);
+          markUserActivity();
         }
       
       lcd.drawLine(0, SCREEN_H / 2, SCREEN_W, SCREEN_H / 2, ST77XX_GRAY);
@@ -819,6 +836,10 @@ static void processButtons(void) {
   B4Pressed = false;
   interrupts();
 
+  if (Button1 || Button2 || Button3 || Button4) {
+    markUserActivity();
+  }
+
 //ToDo: call the respective functions
   if(Button1){
     buttonReactSw1();
@@ -836,6 +857,32 @@ static void processButtons(void) {
     buttonReactSw4();
   }
 }
+
+/*************************************************************************************************
+                                        SCREEN SAVER FUNCTIONS
+**************************************************************************************************/
+
+static void markUserActivity(void) {
+  lastUserActivityMs = millis();
+
+  if (screenSleeping) {
+    digitalWrite(LCD_BCKL_PIN, HIGH);   // backlight ON
+    screenSleeping = false;
+
+    joyCrosshairDrawn = false;
+    joyPrevX = -1;
+    joyPrevY = -1;
+    LcdUtils_clearScreen();
+  }
+}
+
+static void handleInactivitySleep(void) {
+  if (!screenSleeping && (millis() - lastUserActivityMs >= UI_IDLE_TIMEOUT_MS)) {
+    digitalWrite(LCD_BCKL_PIN, LOW);   
+    screenSleeping = true;
+  }
+}
+
 
 /***************************************************************************************************
  *                                     INITIALIZATION FUNCTIONS
