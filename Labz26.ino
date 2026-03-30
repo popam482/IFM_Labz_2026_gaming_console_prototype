@@ -102,9 +102,13 @@
 /***************************************************************************************************
  *                                     DEFINES — Display Geometry
  ***************************************************************************************************/
-#define SCREEN_W 128 /* LCD width in pixels  */
-#define SCREEN_H 96  /* LCD height in pixels */
-#define DOT_RADIUS 3 /* Joystick dot radius  */
+#define SCREEN_W 128    /* LCD width in pixels                              */
+#define SCREEN_H 96     /* LCD height in pixels                             */
+#define DOT_RADIUS 3    /* Joystick dot radius                              */
+#define JOY_DEADZONE 50 /* ADC counts from center treated as "at rest"      */
+
+/* Uncomment to enable verbose joystick ADC output on Serial */
+/* #define JOY_DEBUG */
 
 /* Custom color not provided by Adafruit library */
 #define ST77XX_GRAY 0x7BEF /* Medium gray in RGB565 */
@@ -325,8 +329,8 @@ void setup() {
   analogReadResolution(12);
   long sumX = 0, sumY = 0;
   for (int i = 0; i < 16; i++) {
-    sumX += analogRead(JOY_VRX_PIN);
-    sumY += analogRead(JOY_VRY_PIN);
+    sumX += analogRead(JOY_VRY_PIN); /* joyCenterX must match rawX (reads VRY) */
+    sumY += analogRead(JOY_VRX_PIN); /* joyCenterY must match rawY (reads VRX) */
     delay(5);
   }
   joyCenterX = sumX / 16;
@@ -591,26 +595,31 @@ void Task2_5ms(void) {
   int rawX, rawY;
   /* ---- Continuous joystick position update while on MENU_JOY_POS ---- */
   if (CurrentMenu == MENU_JOY_POS) {
-    //ToDo: Read joystick analog values 
-    rawX=analogRead(JOY_VRY_PIN);
-    rawY=analogRead(JOY_VRX_PIN);
-   
-    //optional print them on the Serial monitor
-    Serial.print("rawX:");
-    Serial.println(rawX);
-    Serial.print("rawY:");
-    Serial.println(rawY);
+    /* VRY controls left/right (screen X), VRX controls up/down (screen Y) */
+    rawX = analogRead(JOY_VRY_PIN);
+    rawY = analogRead(JOY_VRX_PIN);
 
-    /* Two-segment mapping with calibrated center: X axis inverted */
-    if (rawX >= joyCenterX)
-      joyDotX = map(rawX, joyCenterX, 4095, SCREEN_W / 2, DOT_RADIUS);
-    else
-      joyDotX = map(rawX, 0, joyCenterX, SCREEN_W - DOT_RADIUS - 1, SCREEN_W / 2);
+#ifdef JOY_DEBUG
+    Serial.print("VRX=");
+    Serial.print(rawY);   /* rawY reads VRX pin */
+    Serial.print("  VRY=");
+    Serial.println(rawX); /* rawX reads VRY pin */
+#endif
 
-    if (rawY <= joyCenterY)
-      joyDotY = map(rawY, 0, joyCenterY, DOT_RADIUS, SCREEN_H / 2);
+    /* Apply deadzone: snap to center if within JOY_DEADZONE ADC counts */
+    int adcX = (abs(rawX - joyCenterX) < JOY_DEADZONE) ? joyCenterX : rawX;
+    int adcY = (abs(rawY - joyCenterY) < JOY_DEADZONE) ? joyCenterY : rawY;
+
+    /* Two-segment mapping with calibrated center */
+    if (adcX >= joyCenterX)
+      joyDotX = map(adcX, joyCenterX, 4095, SCREEN_W / 2, SCREEN_W - DOT_RADIUS - 1);
     else
-      joyDotY = map(rawY, joyCenterY, 4095, SCREEN_H / 2, SCREEN_H - DOT_RADIUS - 1);
+      joyDotX = map(adcX, 0, joyCenterX, DOT_RADIUS, SCREEN_W / 2);
+
+    if (adcY <= joyCenterY)
+      joyDotY = map(adcY, 0, joyCenterY, DOT_RADIUS, SCREEN_H / 2);
+    else
+      joyDotY = map(adcY, joyCenterY, 4095, SCREEN_H / 2, SCREEN_H - DOT_RADIUS - 1);
 
     //ToDo: Draw static crosshair once on first entry 
      if (!joyCrosshairDrawn) {
