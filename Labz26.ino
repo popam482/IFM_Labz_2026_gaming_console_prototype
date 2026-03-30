@@ -32,8 +32,8 @@
  *                                     DEFINES — Joystick
  ***************************************************************************************************/
 #define JOY_VRX_PIN A0 /* Joystick VRx analog pin (controls up/down)    */
-#define JOY_VRY_PIN A1 /* Joystick VRy analog pin (controls left/right) */
-#define JOY_BUTTON A2  /* Joystick push button analog pin               */
+#define JOY_VRY_PIN A2 /* Joystick VRy analog pin (controls left/right) */
+#define JOY_BUTTON A1  /* Joystick push button analog pin               */
 
 /***************************************************************************************************
  *                                     DEFINES — LCD Pins
@@ -130,6 +130,7 @@ unsigned long reacDelay = 0;     /* Random delay before green flash (ms)    */
 unsigned long reacStartWait = 0; /* millis() when waiting period began      */
 unsigned long reacP1Time = 0;    /* Player 1 (SW2) reaction time in ms      */
 unsigned long reacP2Time = 0;    /* Player 2 (SW3) reaction time in ms      */
+unsigned long bestReactionTime = 9999;
 bool reacP1Done = false;         /* Player 1 has responded                  */
 bool reacP2Done = false;         /* Player 2 has responded                  */
 bool reacFalseStart = false;  /* false start for reaction game*/
@@ -562,7 +563,6 @@ void Task1_10ms(void) {
 
     LcdUtils_setCursor(0, 60);
     if (reacP1Time == 9999 || reacP2Time == 9999) {
-      // Daca cineva a facut false start
       if (reacP1Time == 9999 && reacP2Time != 9999)
         LcdUtils_printLine("P2 WINS!", WHITE, FONT_DEFAULT);
       else if (reacP2Time == 9999 && reacP1Time != 9999)
@@ -579,8 +579,25 @@ void Task1_10ms(void) {
     LcdUtils_setCursor(0, 72);
     LcdUtils_printLine("SW3 = Play again", CYAN, FONT_DEFAULT);
 
+     if (reacP1Time != 9999 || reacP2Time != 9999) {
+      unsigned long currentBest = 9999;
+      if (reacP1Time != 9999) currentBest = reacP1Time;
+      if (reacP2Time != 9999 && reacP2Time < currentBest) currentBest = reacP2Time;
+      
+      if (currentBest < bestReactionTime) {
+        bestReactionTime = currentBest;
+      }
+    }
     reacState = REAC_IDLE;
     }
+     if (resultsDisplayed) {
+    LcdUtils_setCursor(0, 85);
+    LcdUtils_printLine("BEST: ", WHITE, FONT_DEFAULT);
+    char buf[10];
+    itoa(bestReactionTime, buf, 10);
+    LcdUtils_setCursor(50, 85);
+    LcdUtils_printLine(buf, CYAN, FONT_DEFAULT);
+  }
   }
 }
 
